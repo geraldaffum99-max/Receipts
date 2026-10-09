@@ -995,7 +995,7 @@ function lC() {
   orig: null
  }
 }
-var ssvVersion = "3",
+var ssvVersion = "4",
  ssvTapAt = 0,
  ssvTapEl = null;
 document.addEventListener("pointerdown", function(r) {
@@ -1008,10 +1008,10 @@ async function ssvPatch(r, e) {
 function ssvStampWords(r) {
  var e = [];
  return r.given === !0 && e.push({
-  t: "RECEIVED",
+  t: "PAID",
   ok: !0
  }), r.given === !1 && e.push({
-  t: "NOT RECEIVED",
+  t: "NOT PAID",
   ok: !1
  }), r.taken === !0 && e.push({
   t: "TAKEN",
@@ -1023,7 +1023,7 @@ function ssvStampWords(r) {
 }
 
 function ssvStampSegs() {
- return '<div class="stampset"><p class="minilabel">Stamp the receipt. Tap a stamp again to take it off.</p><div class="seg" data-stamp="given" role="group" aria-label="Received stamp"><button type="button" data-v="1">Received</button><button type="button" data-v="0">Not received</button></div><div class="seg" data-stamp="taken" role="group" aria-label="Taken stamp"><button type="button" data-v="1">Taken</button><button type="button" data-v="0">Not taken</button></div></div>'
+ return '<div class="stampset"><p class="minilabel">Stamp the receipt. Tap a stamp again to take it off.</p><div class="seg" data-stamp="given" role="group" aria-label="Paid stamp"><button type="button" data-v="1">Paid</button><button type="button" data-v="0">Not paid</button></div><div class="seg" data-stamp="taken" role="group" aria-label="Taken stamp"><button type="button" data-v="1">Taken</button><button type="button" data-v="0">Not taken</button></div></div>'
 }
 
 function ssvPaintStamps(r, e) {
