@@ -1,5 +1,5 @@
 // Keeps the app opening without network. Bump the version when the app files change.
-var CACHE = 'ssv-receipts-83a4ed06';
+var CACHE = 'ssv-receipts-7ca2698e';
 var SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); }));

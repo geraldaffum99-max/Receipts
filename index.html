@@ -200,6 +200,15 @@ th.n,td.n{text-align:right;padding-left:10px;white-space:nowrap}
 .obar .headline{margin:0}
 td small{display:block;font-size:.8rem;color:var(--muted)}
 .link.mini{padding:0;font-size:.85rem}
+.hist>li{padding:10px 0}
+.h1{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:.82rem;color:var(--muted)}
+.hw{font-weight:700;color:var(--ink);font-size:.92rem}
+.hw small{font-weight:400;color:var(--muted);font-size:.78rem}
+.htitle{margin:3px 0 0;font-weight:600;overflow-wrap:anywhere}
+.hlines{list-style:none;margin:3px 0 0;padding:0;font-size:.9rem}
+.hlines li{padding:1px 0;overflow-wrap:anywhere}
+#d-hist{margin:0 0 10px}
+#hist-me .f{margin-bottom:8px}
 .seg[data-stamp] button+button{border-left:1.5px solid var(--blue)}
 .ministamp{display:inline-block;margin:0 6px 0 0}
 </style>
@@ -959,11 +968,11 @@ function uC(r) {
 var UB = null;
 
 function cC(r, e, t) {
- H("#sheet-title").textContent = r, H("#sheet-body").innerHTML = e, UB = t || null, H("#sheet").hidden = !1, document.body.style.overflow = "hidden", H(".sheet-card").scrollTop = 0
+ ssvHistStop(), H("#sheet-title").textContent = r, H("#sheet-body").innerHTML = e, UB = t || null, H("#sheet").hidden = !1, document.body.style.overflow = "hidden", H(".sheet-card").scrollTop = 0
 }
 
 function as() {
- H("#sheet").hidden = !0, H("#sheet-body").innerHTML = "", UB = null, document.body.style.overflow = ""
+ ssvHistStop(), H("#sheet").hidden = !0, H("#sheet-body").innerHTML = "", UB = null, document.body.style.overflow = ""
 }
 H("#sheet-close").addEventListener("click", as);
 H("#sheet").addEventListener("click", function(r) {
@@ -992,10 +1001,11 @@ function lC() {
   taken: null,
   editId: null,
   prevPaid: 0,
+  paidTotal: "",
   orig: null
  }
 }
-var ssvVersion = "4",
+var ssvVersion = "6",
  ssvTapAt = 0,
  ssvTapEl = null;
 document.addEventListener("pointerdown", function(r) {
@@ -1120,7 +1130,7 @@ function ssvStartEdit(r) {
    manual: !0,
    done: !!e.done
   }
- }), ce.prevPaid = lt(r.paid || 0), ce.pay = r.balance > 0 ? "part" : "full", ce.paidNow = "", ce.given = r.given === !0 || r.given === !1 ? r.given : null, ce.taken = r.taken === !0 || r.taken === !1 ? r.taken : null, ce.orig = JSON.parse(JSON.stringify(r)), as(), FT("sell"), ssvFocusAdd()
+ }), ce.prevPaid = lt(r.paid || 0), ce.paidTotal = String(lt(r.paid || 0)), ce.pay = r.balance > 0 ? "part" : "full", ce.paidNow = "", ce.given = r.given === !0 || r.given === !1 ? r.given : null, ce.taken = r.taken === !0 || r.taken === !1 ? r.taken : null, ce.orig = JSON.parse(JSON.stringify(r)), as(), FT("sell"), ssvFocusAdd()
 }
 
 function ssvDebtSheet(r) {
@@ -1161,7 +1171,10 @@ function ssvDebtSheet(r) {
     };
    t = !0;
    try {
-    await GB(B), Kt || xt(), as(), be(a + " now owes " + Xe(u + o))
+    await GB(B), ssvLog("debt-new", "Debt of " + gt(o) + " written for " + a, [B.note, "Owes " + gt(u) + " \u2192 " + gt(u + o)], {
+     cust: rt(a),
+     rids: [B.id]
+    }), Kt || xt(), as(), be(a + " now owes " + Xe(u + o))
    } catch (d) {
     Bi(d)
    }
@@ -1169,9 +1182,194 @@ function ssvDebtSheet(r) {
   }
  }), H("#b-name").addEventListener("input", n), n(), H(r ? "#b-amt" : "#b-name").focus()
 }
+var ssvMem = {},
+ ssvHistUnsub = null,
+ ssvHistRows = [],
+ ssvHistLoaded = !1;
+
+function ssvGet(r) {
+ try {
+  var e = window.localStorage.getItem(r);
+  if (e) return e
+ } catch (t) {}
+ return ssvMem[r] || ""
+}
+
+function ssvSet(r, e) {
+ ssvMem[r] = e;
+ try {
+  window.localStorage.setItem(r, e)
+ } catch (t) {}
+}
+
+function ssvWho() {
+ return ssvGet("ssv_who").trim()
+}
+
+function ssvDev() {
+ var r = ssvGet("ssv_dev");
+ if (!r) {
+  for (var e = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789", t = 0; t < 4; t++) r += e.charAt(Math.floor(Math.random() * e.length));
+  ssvSet("ssv_dev", r)
+ }
+ return r
+}
+
+function ssvLog(r, e, t, n) {
+ var s = {
+  ts: Date.now(),
+  date: ba(),
+  who: ssvWho() || "No name",
+  dev: ssvDev(),
+  type: r,
+  title: e,
+  lines: (t || []).filter(Boolean).slice(0, 60),
+  cust: "",
+  rids: []
+ };
+ n && Object.keys(n).forEach(function(a) {
+  s[a] = n[a]
+ });
+ try {
+  var i = Kt.doc("log/" + MB("l")).set(s);
+  i && i.catch && i.catch(function() {})
+ } catch (a) {}
+}
+
+function ssvStampText(r) {
+ var e = ssvStampWords(r).map(function(t) {
+  return t.t
+ }).join(", ");
+ return e || "none"
+}
+
+function ssvQtyName(r) {
+ return is(r.qty) + (r.unit ? " " + r.unit : "") + " " + r.name + " at " + gt(r.price)
+}
+
+function ssvLineDiff(r, e) {
+ var t = [],
+  n = {};
+ return e.forEach(function(s) {
+  for (var i = -1, a = 0; a < r.length; a++)
+   if (!n[a] && s.itemId && r[a].itemId === s.itemId) {
+    i = a;
+    break
+   } if (i < 0)
+   for (a = 0; a < r.length; a++)
+    if (!n[a] && rt(r[a].name) === rt(s.name)) {
+     i = a;
+     break
+    } if (i < 0) {
+   t.push("Added: " + ssvQtyName(s));
+   return
+  }
+  n[i] = 1;
+  var o = r[i],
+   u = [];
+  rt(o.name) !== rt(s.name) && u.push("name was " + o.name), Number(o.qty) !== Number(s.qty) && u.push("qty " + is(o.qty) + " \u2192 " + is(s.qty)), lt(o.price) !== lt(s.price) && u.push("price " + gt(o.price) + " \u2192 " + gt(s.price)), u.length && t.push(s.name + ": " + u.join(", "))
+ }), r.forEach(function(s, i) {
+  n[i] || t.push("Removed: " + ssvQtyName(s))
+ }), t
+}
+
+function ssvItemText(r) {
+ var e = function(t) {
+  return t == null ? "none" : gt(t)
+ };
+ return "Normal " + e(r.normal) + ", wholesale " + e(r.wholesale) + ", stock " + (r.stock == null ? "not counted" : is(r.stock))
+}
+
+function ssvItemLog(r, e) {
+ if (!r) return ssvLog("item-new", "Item added: " + e.name, [ssvItemText(e)]);
+ var t = [],
+  n = function(i) {
+   return i == null ? "none" : gt(i)
+  },
+  s = function(i) {
+   return i == null ? "not counted" : is(i)
+  };
+ r.name !== e.name && t.push("Name: " + r.name + " \u2192 " + e.name), (r.unit || "") !== (e.unit || "") && t.push("Sold by: " + (r.unit || "piece") + " \u2192 " + (e.unit || "piece")), n(r.normal) !== n(e.normal) && t.push("Normal price " + n(r.normal) + " \u2192 " + n(e.normal)), n(r.wholesale) !== n(e.wholesale) && t.push("Wholesale price " + n(r.wholesale) + " \u2192 " + n(e.wholesale)), s(r.stock) !== s(e.stock) && t.push("Stock " + s(r.stock) + " \u2192 " + s(e.stock)), t.length && ssvLog("item-edit", "Item changed: " + e.name, t)
+}
+
+function ssvHistStop() {
+ if (ssvHistUnsub) {
+  try {
+   ssvHistUnsub()
+  } catch (r) {}
+  ssvHistUnsub = null
+ }
+}
+
+function ssvWhen(r) {
+ var e = new Date(r),
+  t = function(n) {
+   return (n < 10 ? "0" : "") + n
+  };
+ return sr(DT(e)) + ", " + t(e.getHours()) + ":" + t(e.getMinutes())
+}
+
+function ssvHistPaint() {
+ var r = H("#hist-list");
+ if (r) {
+  var e = rt(H("#hist-q").value),
+   t = ssvHistRows.filter(function(n) {
+    return !e || rt([n.title, n.who, n.dev, (n.lines || []).join(" ")].join(" ")).indexOf(e) >= 0
+   });
+  r.innerHTML = t.length ? t.map(function(n) {
+   return '<li><div class="h1"><span class="hw">' + we(n.who || "No name") + " <small>phone " + we(n.dev || "?") + "</small></span><span>" + ssvWhen(n.ts) + '</span></div><p class="htitle">' + we(n.title) + "</p>" + ((n.lines || []).length ? '<ul class="hlines">' + n.lines.map(function(s) {
+    return "<li>" + we(s) + "</li>"
+   }).join("") + "</ul>" : "") + "</li>"
+  }).join("") : '<li class="empty">' + (ssvHistLoaded ? e ? "Nothing matches." : "Nothing recorded yet. Every change made from now on shows here." : "Loading\u2026") + "</li>"
+ }
+}
+
+function ssvHistMe() {
+ var r = H("#hist-me");
+ r && (r.innerHTML = "This phone: <b>" + we(ssvWho() || "No name") + "</b>, phone code " + we(ssvDev()) + '. <button type="button" class="link mini" data-act="rename">Change name</button>')
+}
+
+function ssvHistorySheet(r) {
+ r = r || {};
+ var e = '<p class="hint" id="hist-me"></p>' + (r.label ? '<p class="headline">' + we(r.label) + "</p>" : "") + '<label class="f"><span>Find</span><input id="hist-q" type="search" autocomplete="off" placeholder="Customer, receipt number or person"></label><ul id="hist-list" class="rows hist"></ul><p class="hint">' + (r.rid || r.cust ? "" : "Showing the latest 200 changes. ") + "Nothing here can be edited or removed from the app.</p>";
+ cC("Change history", e, function(n) {
+  var s = n.target.closest("[data-act]");
+  if (s) {
+   if (s.dataset.act === "rename") H("#hist-me").innerHTML = '<label class="f"><span>Name on this phone</span><input id="hist-name" autocomplete="off" autocapitalize="words" value="' + we(ssvWho()) + '"></label><button type="button" class="btn fit" data-act="rename-save">Save name</button>', H("#hist-name").focus();
+   else if (s.dataset.act === "rename-save") {
+    var i = H("#hist-name").value.trim(),
+     a = ssvWho();
+    if (i.length < 2) return H("#hist-name").focus(), be("Type your name.");
+    i !== a && (ssvSet("ssv_who", i), ssvLog("name", "Phone " + ssvDev() + ": name changed from " + (a || "No name") + " to " + i)), ssvHistMe()
+   }
+  }
+ }), ssvHistMe(), ssvHistRows = [], ssvHistLoaded = !1, ssvHistPaint(), H("#hist-q").addEventListener("input", ssvHistPaint);
+ var t = Kt.collection("log");
+ t = r.rid ? t.where("rids", "array-contains", r.rid) : r.cust ? t.where("cust", "==", r.cust) : t.orderBy("ts", "desc").limit(200), ssvHistUnsub = t.onSnapshot(function(n) {
+  ssvHistRows = n.docs.map(function(s) {
+   return s.data()
+  }).sort(function(s, i) {
+   return (i.ts || 0) - (s.ts || 0)
+  }), ssvHistLoaded = !0, ssvHistPaint()
+ }, function(n) {
+  ssvHistLoaded = !0, ssvHistPaint(), window.console && console.error(n), be(n && n.code === "permission-denied" ? "This login is not allowed to read the history." : "Could not load the history. Check the connection.")
+ })
+}
+
+function ssvNameGate() {
+ sC(!1), H("#view").innerHTML = '<section><p class="headline">Who uses this phone?</p><p class="hint">Type your name once. It is written beside every change made from this phone, so the shop can see who did what.</p><label class="f"><span>Your name</span><input id="n-name" autocomplete="off" autocapitalize="words"></label><button type="button" class="btn primary" id="n-go">Continue</button></section>';
+ var r = function() {
+  var e = H("#n-name").value.trim();
+  if (e.length < 2) return H("#n-name").focus(), be("Type your name.");
+  ssvSet("ssv_who", e), ssvLog("name", "Phone " + ssvDev() + ": name set to " + e), sC(!0), FT("sell"), xt()
+ };
+ H("#n-go").addEventListener("click", r), H("#n-name").addEventListener("keydown", function(e) {
+  e.key === "Enter" && r()
+ })
+}
 function ST() {
  var r = !!ce.editId;
- H("#view").innerHTML = "<section>" + (r ? '<div class="editing"><span>Changing receipt <b class="serial">No. ' + tn(ce.no) + '</b>. Add items or correct anything, then save.</span><button type="button" class="link" id="s-stop">Stop</button></div>' : "") + '<div class="seg" id="s-type" role="group" aria-label="Price for this receipt"><button type="button" data-v="normal">Normal price</button><button type="button" data-v="wholesale">Wholesale price</button></div><div class="grid2"><label class="f"><span>Customer</span><input id="s-cust" autocomplete="off" list="s-custs" placeholder="Name" value="' + we(ce.customer) + '"></label><label class="f"><span>Receipt no.</span><input id="s-no" class="serial" inputmode="numeric" autocomplete="off"' + (r ? " disabled" : "") + '></label></div><datalist id="s-custs"></datalist><p class="line-note" id="s-owes" hidden></p><label class="f"><span>Phone or address</span><input id="s-info" autocomplete="off" placeholder="Optional" value="' + we(ce.info) + '"></label><label class="f" id="s-addf"><span>Add an item</span><input id="s-pick" type="search" autocomplete="off" enterkeyhint="search" placeholder="Type the item name"></label><ul id="s-picks" class="picks" hidden></ul><p class="hint" id="s-tickhint" hidden>The newest item is on top. Tick the box when an item has been brought out for the customer.</p><ul id="s-lines" class="lines"></ul><div class="sum"><div class="sum-row total"><span>Total</span><output id="s-total"></output></div><div id="s-edrows"' + (r ? "" : " hidden") + '><div class="sum-row"><span>Paid before</span><output id="s-prev"></output></div><div class="sum-row"><span id="s-leftl">Left to pay</span><output id="s-left"></output></div></div><div class="seg" id="s-pay" role="group" aria-label="Payment"><button type="button" data-v="full">Paid in full</button><button type="button" data-v="part">Owes some or all</button></div><div id="s-part" hidden><label class="f"><span>' + (r ? "Paying now (GH\xA2)" : "Paid now (GH\xA2)") + '</span><input id="s-paid" inputmode="decimal" autocomplete="off" placeholder="0" value="' + we(ce.paidNow) + '"></label><div class="sum-row owe"><span>Still owes on this receipt</span><output id="s-bal"></output></div><div class="sum-row owe" id="s-allrow" hidden><span>All debt after this</span><output id="s-all"></output></div></div></div><div id="s-stamps">' + ssvStampSegs() + '</div><button type="button" class="btn primary" id="s-save">' + (r ? "Save changes" : "Save receipt") + "</button></section>";
+ H("#view").innerHTML = "<section>" + (r ? '<div class="editing"><span>Changing receipt <b class="serial">No. ' + tn(ce.no) + '</b>. Add items or correct anything, then save.</span><button type="button" class="link" id="s-stop">Stop</button></div>' : "") + '<div class="seg" id="s-type" role="group" aria-label="Price for this receipt"><button type="button" data-v="normal">Normal price</button><button type="button" data-v="wholesale">Wholesale price</button></div><div class="grid2"><label class="f"><span>Customer</span><input id="s-cust" autocomplete="off" list="s-custs" placeholder="Name" value="' + we(ce.customer) + '"></label><label class="f"><span>Receipt no.</span><input id="s-no" class="serial" inputmode="numeric" autocomplete="off"' + (r ? " disabled" : "") + '></label></div><datalist id="s-custs"></datalist><p class="line-note" id="s-owes" hidden></p><label class="f"><span>Phone or address</span><input id="s-info" autocomplete="off" placeholder="Optional" value="' + we(ce.info) + '"></label><label class="f" id="s-addf"><span>Add an item</span><input id="s-pick" type="search" autocomplete="off" enterkeyhint="search" placeholder="Type the item name"></label><ul id="s-picks" class="picks" hidden></ul><p class="hint" id="s-tickhint" hidden>The newest item is on top. Tick the box when an item has been brought out for the customer.</p><ul id="s-lines" class="lines"></ul><div class="sum"><div class="sum-row total"><span>Total</span><output id="s-total"></output></div><div id="s-edrows"' + (r ? "" : " hidden") + '><label class="f"><span>Amount paid so far (GH\xA2)</span><input id="s-paidtotal" inputmode="decimal" autocomplete="off" placeholder="0" value="' + we(ce.paidTotal) + '"></label><p class="hint">It was ' + Xe(ce.prevPaid || 0) + ' before this change. Type the true amount the customer has paid. <button type="button" class="link mini" id="s-payall">Set as paid in full</button></p><div class="sum-row owe"><span id="s-edl">Still owes on this receipt</span><output id="s-edbal"></output></div><div class="sum-row owe" id="s-edallrow" hidden><span>All debt after this</span><output id="s-edall"></output></div></div><div id="s-newpay"' + (r ? " hidden" : "") + '><div class="seg" id="s-pay" role="group" aria-label="Payment"><button type="button" data-v="full">Paid in full</button><button type="button" data-v="part">Owes some or all</button></div><div id="s-part" hidden><label class="f"><span>Paid now (GH\xA2)</span><input id="s-paid" inputmode="decimal" autocomplete="off" placeholder="0" value="' + we(ce.paidNow) + '"></label><div class="sum-row owe"><span>Still owes on this receipt</span><output id="s-bal"></output></div><div class="sum-row owe" id="s-allrow" hidden><span>All debt after this</span><output id="s-all"></output></div></div></div></div><div id="s-stamps">' + ssvStampSegs() + '</div><button type="button" class="btn primary" id="s-save">' + (r ? "Save changes" : "Save receipt") + "</button></section>";
  r && H("#s-stop").addEventListener("click", function() {
   ce = lC(), ST(), RT(), window.scrollTo(0, 0)
  });
@@ -1254,6 +1452,10 @@ function ST() {
   t && (ce.pay = t.dataset.v, $m(), Su(), ce.pay === "part" && H("#s-paid").focus())
  }), H("#s-paid").addEventListener("input", function() {
   ce.paidNow = this.value, Su()
+ }), H("#s-paidtotal").addEventListener("input", function() {
+  ce.paidTotal = this.value, Su()
+ }), H("#s-payall").addEventListener("click", function() {
+  ce.paidTotal = String(TP()), H("#s-paidtotal").value = ce.paidTotal, Su()
  }), H("#s-stamps").addEventListener("click", function(e) {
   ssvStampClick(e, ce) && ssvPaintStamps(H("#s-stamps"), ce)
  }), H("#s-save").addEventListener("click", vP), $m(), Au()
@@ -1361,17 +1563,19 @@ function Su() {
   });
   var r = TP();
   H("#s-total").textContent = Xe(r);
-  var e = ce.editId ? lt(ce.prevPaid || 0) : 0,
-   t = lt(Math.max(0, r - e));
-  ce.editId && (H("#s-prev").textContent = Xe(e), H("#s-leftl").textContent = r < e ? "To give back" : "Left to pay", H("#s-left").textContent = Xe(r < e ? e - r : t));
-  var n = Math.min(t, Math.max(0, Ze(ce.paidNow) || 0)),
-   s = lt(t - n);
-  H("#s-bal").textContent = Xe(s);
   var i = ssvOwedBy(ce.customer, ce.editId),
    a = H("#s-owes");
   a.hidden = !(i > 0), a.textContent = i > 0 ? ce.customer.trim() + " already owes " + Xe(i) + (ce.editId ? " on other receipts." : ".") : "";
-  var o = H("#s-allrow");
-  o.hidden = !(i > 0 && ce.pay === "part"), H("#s-all").textContent = Xe(i + s)
+  if (ce.editId) {
+   var e = Ze(ce.paidTotal),
+    t = lt(r - (e == null ? 0 : Math.max(0, e)));
+   H("#s-edl").textContent = t < 0 ? "That is more than the total by" : "Still owes on this receipt", H("#s-edbal").textContent = Xe(Math.abs(t)), H("#s-edallrow").hidden = !(i > 0 && t > 0), H("#s-edall").textContent = Xe(i + Math.max(0, t))
+  } else {
+   var n = Math.min(r, Math.max(0, Ze(ce.paidNow) || 0)),
+    s = lt(r - n),
+    o = H("#s-allrow");
+   H("#s-bal").textContent = Xe(s), o.hidden = !(i > 0 && ce.pay === "part"), H("#s-all").textContent = Xe(i + s)
+  }
  }
 }
 async function vP() {
@@ -1398,7 +1602,12 @@ async function vP() {
     return ae + I.amount
    }, 0)),
    prev = ed ? lt(ce.prevPaid || 0) : 0,
-   payNow = ce.pay === "part" && i >= prev ? lt(Math.min(i - prev, Math.max(0, Ze(ce.paidNow) || 0))) : lt(i - prev),
+   ptot = ed ? Ze(ce.paidTotal) : null;
+  if (ed) {
+   if (ptot == null || ptot < 0) return H("#s-paidtotal").focus(), be("Enter the amount paid so far. Type 0 if nothing has been paid.");
+   if (lt(ptot) > i) return H("#s-paidtotal").focus(), be("The amount paid is more than the total of " + Xe(i) + ". Correct it.")
+  }
+  var payNow = ed ? lt(lt(ptot) - prev) : ce.pay === "part" ? lt(Math.min(i, Math.max(0, Ze(ce.paidNow) || 0))) : i,
    a = lt(prev + payNow),
    o = lt(Math.max(0, i - a)),
    u = ce.customer.trim();
@@ -1479,6 +1688,22 @@ async function vP() {
      stock: rr.inc(-delta)
     })
    }
+   var ssvCn = u || "Cash customer";
+   if (ed) {
+    var ssvO = ce.orig,
+     ssvCh = [],
+     ssvS0 = ssvStampText(ssvO),
+     ssvS1 = ssvStampText(D);
+    rt(ssvO.customer) !== rt(u) && ssvCh.push("Customer: " + (ssvO.customer || "Cash customer") + " \u2192 " + ssvCn), ssvO.priceType !== m && ssvCh.push("Price type: " + Pu(ssvO.priceType) + " \u2192 " + Pu(m)), ssvCh = ssvCh.concat(ssvLineDiff(ssvO.lines || [], r)), lt(ssvO.total) !== i && ssvCh.push("Total " + gt(ssvO.total) + " \u2192 " + gt(i)), lt(ssvO.paid) !== a && ssvCh.push("Paid " + gt(ssvO.paid) + " \u2192 " + gt(a)), lt(ssvO.balance) !== o && ssvCh.push("Owes " + gt(ssvO.balance) + " \u2192 " + gt(o)), ssvS0 !== ssvS1 && ssvCh.push("Stamp: " + ssvS0 + " \u2192 " + ssvS1), ssvCh.length || ssvCh.push("Saved again with nothing changed"), ssvLog("receipt-edit", "Receipt " + tn(l) + " changed (" + ssvCn + ")", ssvCh, {
+     cust: rt(u),
+     rids: [D.id],
+     no: l
+    })
+   } else ssvLog("receipt-new", "Receipt " + tn(l) + " written for " + ssvCn, [r.length + (r.length === 1 ? " item" : " items") + ", total " + gt(i), o > 0 ? "Paid " + gt(a) + ", owes " + gt(o) : "Paid in full", ssvStampText(D) === "none" ? "" : "Stamp: " + ssvStampText(D)], {
+    cust: rt(u),
+    rids: [D.id],
+    no: l
+   });
    ce = lC(), he.tab === "sell" && (ST(), RT(), window.scrollTo(0, 0)), Kt || xt(), BC(D), be(ed ? "Receipt " + tn(l) + " updated" : "Receipt saved")
   } catch (ae) {
    Bi(ae)
@@ -1601,7 +1826,13 @@ function BC(r0) {
   e = !!window.jspdf,
   live = !r.cancelled,
   t = r.balance > 0 && live,
-  n = '<div id="r-paper">' + bP(r) + "</div>" + (live ? '<p class="hint" id="r-ticks"></p>' + ssvStampSegs() : "") + '<div class="actions">' + (e ? '<button type="button" class="btn primary" data-act="pdf">Share as PDF</button>' : "") + '<button type="button" class="btn' + (e ? "" : " primary") + '" data-act="copy">Copy as text</button><div id="copy-slot"></div>' + (live ? '<button type="button" class="btn" data-act="edit">Add items or change this receipt</button>' : "") + (t ? '<div class="payrow"><label class="f"><span>Payment received (GH\xA2)</span><input id="p-amt" inputmode="decimal" autocomplete="off" value="' + r.balance + '"></label><button type="button" class="btn fit" data-act="pay">Record payment</button></div>' : "") + (live ? '<button type="button" class="link danger" data-act="cancel">Cancel this receipt</button>' : "") + "</div>",
+  n = '<div id="r-paper">' + bP(r) + "</div>" + (live ? '<p class="hint" id="r-ticks"></p>' + ssvStampSegs() : "") + '<div class="actions">' + (e ? '<button type="button" class="btn primary" data-act="pdf">Share as PDF</button>' : "") + '<button type="button" class="btn' + (e ? "" : " primary") + '" data-act="copy">Copy as text</button><div id="copy-slot"></div>' + (live ? '<button type="button" class="btn" data-act="edit">Add items or change this receipt</button>' : "") + (t ? '<div class="payrow"><label class="f"><span>Payment received (GH\xA2)</span><input id="p-amt" inputmode="decimal" autocomplete="off" value="' + r.balance + '"></label><button type="button" class="btn fit" data-act="pay">Record payment</button></div>' : "") + '<button type="button" class="link" data-act="hist">History of this receipt</button>' + (live ? '<button type="button" class="link danger" data-act="cancel">Cancel this receipt</button>' : "") + "</div>",
+  ssvX = {
+   cust: rt(r.customer),
+   rids: [r.id],
+   no: r.no
+  },
+  ssvCn = r.customer || "Cash customer",
   s = !1,
   i = !1,
   drop = !1,
@@ -1625,8 +1856,9 @@ function BC(r0) {
    }
    return
   }
+  var ssvS0 = ssvStampText(r);
   if (live && ssvStampClick(a, r)) {
-   H("#r-paper").innerHTML = bP(r), paint();
+   H("#r-paper").innerHTML = bP(r), paint(), ssvLog("stamp", "Receipt " + tn(r.no) + " stamp changed (" + ssvCn + ")", ["Stamp: " + ssvS0 + " \u2192 " + ssvStampText(r)], ssvX);
    try {
     await ssvPatch(r.id, {
      given: r.given === void 0 ? null : r.given,
@@ -1640,7 +1872,11 @@ function BC(r0) {
   var o = a.target.closest("[data-act]");
   if (!(!o || i)) {
    var u = o.dataset.act;
-   if (u === "edit") {
+   if (u === "hist") ssvHistorySheet({
+    rid: r.id,
+    label: "Receipt " + tn(r.no)
+   });
+   else if (u === "edit") {
     if (ce.lines.length && !ce.editId && !drop) {
      drop = !0, o.textContent = "The unsaved receipt on the Sell page will be dropped. Tap again to go on.";
      return
@@ -1693,7 +1929,7 @@ function BC(r0) {
      amount: O
     }]), q.paid = lt(q.paid + O), q.balance = lt(q.total - q.paid);
     try {
-     await GB(q), Kt || xt(), BC(q), be("Payment of " + Xe(O) + " recorded")
+     await GB(q), ssvLog("pay", "Payment of " + gt(O) + " on receipt " + tn(r.no) + " (" + ssvCn + ")", ["Owes " + gt(r.balance) + " \u2192 " + gt(q.balance)], ssvX), Kt || xt(), BC(q), be("Payment of " + Xe(O) + " recorded")
     } catch (re) {
      Bi(re)
     }
@@ -1707,7 +1943,7 @@ function BC(r0) {
     var $ = JSON.parse(JSON.stringify(r));
     $.cancelled = !0;
     try {
-     await GB($);
+     await GB($), ssvLog("receipt-cancel", "Receipt " + tn($.no) + " cancelled (" + ssvCn + ")", ["Total " + gt($.total) + ", paid " + gt($.paid) + ", owed " + gt($.balance)], ssvX);
      for (var Z = 0; Z < $.lines.length; Z++) {
       var le = $.lines[Z].itemId ? he.items.get($.lines[Z].itemId) : null;
       le && le.stock != null && await vT(le.id, {
@@ -1791,7 +2027,7 @@ function PP() {
         })
        }
       }), !n.length) return be("Nothing new to import.");
-     rr.batchSet("items", n), be(n.length + " items imported")
+     rr.batchSet("items", n), ssvLog("item-import", n.length + " items imported from a file", []), be(n.length + " items imported")
     } catch {
      be("That file could not be read.")
     }
@@ -1866,7 +2102,7 @@ function yT(r) {
     }
     i = !0;
     try {
-     await _P(r.id), Kt || xt(), as(), be("Item removed")
+     await _P(r.id), ssvLog("item-del", "Item removed: " + r.name, [ssvItemText(r)]), Kt || xt(), as(), be("Item removed")
     } catch (m) {
      Bi(m)
     }
@@ -1892,7 +2128,7 @@ function yT(r) {
    };
    i = !0;
    try {
-    await TT(p), Kt || xt(), as(), be("Item saved")
+    await TT(p), ssvItemLog(t ? null : r, p), Kt || xt(), as(), be("Item saved")
    } catch (m) {
     Bi(m)
    }
@@ -1963,7 +2199,7 @@ function xP(r) {
   }).join("") + "</tbody></table>" : "",
   e = '<p class="headline">Owes ' + Xe(r.owed) + '</p><table><thead><tr><th>For</th><th>Date</th><th class="n">Balance</th><th class="n"></th></tr></thead><tbody>' + r.list.map(function(n) {
    return "<tr><td>" + (n.kind === "debt" ? "Old debt" + (n.note ? "<small>" + we(n.note) + "</small>" : "") : 'Receipt <span class="serial">' + tn(n.no) + "</span>") + "</td><td>" + sr(n.date) + '</td><td class="n">' + gt(n.balance) + '</td><td class="n">' + (n.kind === "debt" ? '<button type="button" class="link danger mini" data-del="' + we(n.id) + '">Remove</button>' : '<button type="button" class="link mini" data-open="' + we(n.id) + '">Open</button>') + "</td></tr>"
-  }).join("") + '</tbody></table><div class="actions"><div class="payrow"><label class="f"><span>Money paid now (GH\xA2)</span><input id="o-amt" inputmode="decimal" autocomplete="off" placeholder="0"></label><button type="button" class="btn fit" data-act="pay">Take off debt</button></div><p class="hint">Type what the customer has paid, all or part. It is taken off the oldest debt first.</p><button type="button" class="btn" data-act="more">Add more debt for ' + we(r.name) + "</button></div>" + hist,
+  }).join("") + '</tbody></table><div class="actions"><div class="payrow"><label class="f"><span>Money paid now (GH\xA2)</span><input id="o-amt" inputmode="decimal" autocomplete="off" placeholder="0"></label><button type="button" class="btn fit" data-act="pay">Take off debt</button></div><p class="hint">Type what the customer has paid, all or part. It is taken off the oldest debt first.</p><button type="button" class="btn" data-act="more">Add more debt for ' + we(r.name) + '</button><button type="button" class="link" data-act="hist">History for ' + we(r.name) + "</button></div>" + hist,
   t = !1,
   delAsk = null;
  cC(r.name, e, async function(n) {
@@ -1981,10 +2217,19 @@ function xP(r) {
      return
     }
     t = !0;
+    var gone = r.list.filter(function(d) {
+     return d.id === dl.dataset.del
+    })[0] || {
+     balance: 0,
+     total: 0
+    };
     try {
      await ssvPatch(dl.dataset.del, {
       cancelled: !0,
       balance: 0
+     }), ssvLog("debt-del", "Old debt of " + gt(gone.balance) + " removed for " + r.name, [gone.note, gone.total !== gone.balance ? "It was " + gt(gone.total) + " when written" : "", "Owes " + gt(r.owed) + " \u2192 " + gt(r.owed - gone.balance)], {
+      cust: r.key,
+      rids: [dl.dataset.del]
      }), Kt || xt(), as(), be("Debt removed")
     } catch (d) {
      Bi(d)
@@ -1993,13 +2238,19 @@ function xP(r) {
     return
    }
    if (n.target.closest('[data-act="more"]')) return ssvDebtSheet(r.name);
+   if (n.target.closest('[data-act="hist"]')) return ssvHistorySheet({
+    cust: r.key,
+    label: r.name
+   });
    var s = n.target.closest('[data-act="pay"]');
    if (s) {
     var i = Ze(H("#o-amt").value);
     if (i == null || i <= 0) return H("#o-amt").focus(), be("Enter the amount paid.");
     i = lt(Math.min(i, r.owed));
     var a = i,
-     o = ba();
+     o = ba(),
+     parts = [],
+     pids = [];
     t = !0;
     try {
      for (var u = 0; u < r.list.length && a > 0; u++) {
@@ -2009,10 +2260,13 @@ function xP(r) {
        date: o,
        ts: Date.now(),
        amount: B
-      }]), l.paid = lt(l.paid + B), l.balance = lt(l.total - l.paid), a = lt(a - B), await GB(l)
+      }]), l.paid = lt(l.paid + B), l.balance = lt(l.total - l.paid), a = lt(a - B), parts.push((l.kind === "debt" ? "Old debt" : "Receipt " + tn(l.no)) + ": " + gt(r.list[u].balance) + " \u2192 " + gt(l.balance)), pids.push(l.id), await GB(l)
      }
      var left = lt(r.owed - i);
-     Kt || xt(), as(), be("Payment of " + Xe(i) + " taken off. " + (left > 0 ? r.name + " still owes " + Xe(left) + "." : r.name + " owes nothing now."))
+     ssvLog("debt-pay", r.name + " paid " + gt(i) + " on debt", ["Owes " + gt(r.owed) + " \u2192 " + gt(left)].concat(parts), {
+      cust: r.key,
+      rids: pids
+     }), Kt || xt(), as(), be("Payment of " + Xe(i) + " taken off. " + (left > 0 ? r.name + " still owes " + Xe(left) + "." : r.name + " owes nothing now."))
     } catch (d) {
      Bi(d)
     }
@@ -2053,7 +2307,9 @@ function wT(r) {
 }
 
 function FP() {
- va = va || ba(), H("#view").innerHTML = '<label class="f"><span>Day</span><input id="d-day" type="date" value="' + va + '" max="' + ba() + '"></label><div id="d-out"></div>', H("#d-day").addEventListener("change", function() {
+ va = va || ba(), H("#view").innerHTML = '<label class="f"><span>Day</span><input id="d-day" type="date" value="' + va + '" max="' + ba() + '"></label><button type="button" class="btn" id="d-hist">See the change history</button><div id="d-out"></div>', H("#d-hist").addEventListener("click", function() {
+  ssvHistorySheet({})
+ }), H("#d-day").addEventListener("change", function() {
   va = this.value || ba(), xT()
  })
 }
@@ -2168,7 +2424,7 @@ H("#view").innerHTML = '<p class="hint">Opening the receipt book\u2026</p>';
 rr.onAuth(function(r) {
  if (r) {
   if (he.mode === "cloud") return;
-  he.user = r, he.mode = "cloud", sC(!0), yP(), ce = lC(), FT("sell"), xt()
+  he.user = r, he.mode = "cloud", yP(), ce = lC(), ssvWho() ? (sC(!0), FT("sell"), xt()) : ssvNameGate()
  } else wP(), he.user = null, he.mode = "signedout", sC(!1), as(), LP(), xt()
 });
 "serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost") && window.addEventListener("load", function() {
